@@ -8,7 +8,7 @@ Year: 2025/2026
 
 Author: Boyko Ekaterina Olegovna
 
-Lab: Lab0
+Lab: Lab1
 
 Date of create: 30.10.2025
 
@@ -16,7 +16,7 @@ Date of finished: 03.11.2025
 
 ---
 
-## Отчет
+# Отчет
 
 1. Описание задачи
 
@@ -82,21 +82,26 @@ python-dotenv==1.0.1
 4. Скриншоты работы бота:
 
 Приветсвенное сообщение бота с командами 
+
 <img width="357" height="218" alt="image" src="https://github.com/user-attachments/assets/f2e186a9-e60a-4574-8956-0e85d133a1f2" />
 
 Демонстрация задачи создания новой таски 
+
 <img width="537" height="337" alt="image" src="https://github.com/user-attachments/assets/e2f5a638-c1e4-47be-a042-4e12545237bf" />
 
 Демонстрация задачи вывода всех тасок 
+
 <img width="362" height="129" alt="image" src="https://github.com/user-attachments/assets/f351cc3b-4db5-4c65-b65e-e334adb328de" />
 
 Демонстрация задачи для создания чек листа 
+
 <img width="541" height="290" alt="image" src="https://github.com/user-attachments/assets/86599894-682a-4001-9775-dfe5e159a325" />
 
 Демонстрация задачи закрытия таски 
+
 <img width="363" height="141" alt="image" src="https://github.com/user-attachments/assets/5716ebea-0eec-4ec4-b3c9-0c3f70e23f12" />
 
-Видео-демо: 
+Видео-демо: https://drive.google.com/drive/folders/1aS1GuSrXt7yAGCEVImsyFe1FGeKx2WNI?usp=sharing
 
 5. Трудности и решения
 
