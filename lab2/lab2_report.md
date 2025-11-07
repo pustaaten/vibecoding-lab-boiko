@@ -81,21 +81,26 @@ logging — логирование
 4. Тестирование
 
 Новое привествие и вывод категорий 
+
 <img width="782" height="544" alt="image" src="https://github.com/user-attachments/assets/f9a0ebe2-7d75-4365-86e3-df7d4d998f1b" />
 
 Новости по категории "Спорт" 
+
 <img width="771" height="767" alt="image" src="https://github.com/user-attachments/assets/20971240-1825-4cdc-a206-7ee8430ffbff" />
 
 Выбор страны новостей 
+
 <img width="457" height="108" alt="image" src="https://github.com/user-attachments/assets/29bbcbf2-211e-4e92-85b9-172f59772215" />
 
 Вывод популярных источников новостей 
+
 <img width="464" height="567" alt="image" src="https://github.com/user-attachments/assets/8cab8757-cfbe-4b75-9b2f-2f2059026310" />
 
 Вывод новостей по конкретному источнику 
+
 <img width="496" height="470" alt="image" src="https://github.com/user-attachments/assets/f8b43c9c-5879-4e32-83ef-4fb19c324892" />
 
-Ссылка на видео: 
+Ссылка на видео: https://drive.google.com/drive/folders/1aS1GuSrXt7yAGCEVImsyFe1FGeKx2WNI?usp=sharing
 
 5. Выводы 
 
