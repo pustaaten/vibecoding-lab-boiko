@@ -8,7 +8,7 @@ Year: 2025/2026
 
 Author: Boyko Ekaterina Olegovna
 
-Lab: Lab0
+Lab: Lab2
 
 Date of create: 04.11.2025
 
