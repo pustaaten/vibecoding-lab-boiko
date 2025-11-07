@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.error import TimedOut, NetworkError, TelegramError
 from telegram.ext import (
@@ -19,6 +19,7 @@ from telegram.ext import (
     CommandHandler,
     ConversationHandler,
     MessageHandler,
+    CallbackQueryHandler,
     filters,
 )
 
@@ -58,6 +59,17 @@ NEWS_CATEGORIES = [
     "sports",
     "technology",
 ]
+
+# Russian names for categories for better UX
+CATEGORY_NAMES = {
+    "business": "Бизнес",
+    "entertainment": "Развлечения",
+    "general": "Общее",
+    "health": "Здоровье",
+    "science": "Наука",
+    "sports": "Спорт",
+    "technology": "Технологии",
+}
 
 
 # -----------------------------
@@ -204,7 +216,130 @@ def format_articles(articles: List[dict], limit: int = 5) -> str:
 # News command handlers
 # -----------------------------
 
+def build_category_keyboard() -> InlineKeyboardMarkup:
+    """Build inline keyboard with news categories as buttons.
+    
+    Creates a keyboard with 2 buttons per row for better layout.
+    """
+    keyboard = []
+    # Create rows with 2 buttons each
+    for i in range(0, len(NEWS_CATEGORIES), 2):
+        row = []
+        # Add first button in row
+        cat = NEWS_CATEGORIES[i]
+        row.append(InlineKeyboardButton(
+            CATEGORY_NAMES.get(cat, cat.capitalize()),
+            callback_data=f"news_category_{cat}"
+        ))
+        # Add second button if exists
+        if i + 1 < len(NEWS_CATEGORIES):
+            cat2 = NEWS_CATEGORIES[i + 1]
+            row.append(InlineKeyboardButton(
+                CATEGORY_NAMES.get(cat2, cat2.capitalize()),
+                callback_data=f"news_category_{cat2}"
+            ))
+        keyboard.append(row)
+    return InlineKeyboardMarkup(keyboard)
+
+
+async def fetch_and_send_news(update: Update, context: CallbackContext, category: str, is_callback: bool = False) -> None:
+    """Fetch news for a category and send to user.
+    
+    Args:
+        update: Update object (from command or callback)
+        context: CallbackContext
+        category: News category name
+        is_callback: True if called from callback query (button click), False if from command
+    """
+    if not NEWSAPI_KEY:
+        error_msg = "NEWSAPI_KEY не задан. Укажите его в .env, чтобы пользоваться новостями."
+        if is_callback and update.callback_query:
+            try:
+                await update.callback_query.answer()
+                await update.callback_query.edit_message_text(error_msg)
+            except Exception as e:
+                logger.error(f"Error sending error message via callback: {e}")
+        else:
+            await safe_send_message(update, error_msg)
+        return
+    
+    if category not in NEWS_CATEGORIES:
+        error_msg = "Неизвестная категория. См. /categories"
+        if is_callback and update.callback_query:
+            try:
+                await update.callback_query.answer()
+                await update.callback_query.edit_message_text(error_msg)
+            except Exception as e:
+                logger.error(f"Error sending error message via callback: {e}")
+        else:
+            await safe_send_message(update, error_msg)
+        return
+    
+    chat_id = update.effective_chat.id
+    country = context.chat_data.get("news_country", "us")
+    logger.info(f"Fetching news for category={category}, country={country}, chat={chat_id}")
+    
+    # Show loading message for callback queries
+    if is_callback and update.callback_query:
+        try:
+            await update.callback_query.answer("Загрузка новостей...")
+        except Exception:
+            pass
+    
+    # Fetch news from API
+    data = news_api_get("top-headlines", {"category": category, "country": country, "pageSize": 10})
+    if not data:
+        error_msg = "Не удалось получить новости. Попробуйте позже."
+        if is_callback and update.callback_query:
+            try:
+                await update.callback_query.edit_message_text(error_msg, reply_markup=None)
+            except Exception as e:
+                logger.error(f"Error updating message via callback: {e}")
+                # Fallback: send new message
+                try:
+                    await update.callback_query.message.reply_text(error_msg)
+                except Exception:
+                    pass
+        else:
+            await safe_send_message(update, error_msg)
+        return
+    
+    text = format_articles(data.get("articles", []))
+    
+    # Send news articles
+    if is_callback and update.callback_query:
+        try:
+            # Try to edit the message with keyboard
+            full_text = f"📰 Новости: {CATEGORY_NAMES.get(category, category)}\n\n{text}"
+            # Telegram message limit is 4096, but we need space for header
+            if len(full_text) > 4000:
+                # Split into parts
+                await update.callback_query.edit_message_text(
+                    f"📰 Новости: {CATEGORY_NAMES.get(category, category)}\n\n{text[:3900]}...",
+                    reply_markup=None  # Remove keyboard after selection
+                )
+                # Send the rest
+                remaining = text[3900:]
+                await update.callback_query.message.reply_text(remaining)
+            else:
+                await update.callback_query.edit_message_text(
+                    full_text,
+                    reply_markup=None  # Remove keyboard after selection
+                )
+        except Exception as e:
+            logger.error(f"Error editing message via callback: {e}")
+            # Fallback: send new message
+            try:
+                await update.callback_query.message.reply_text(f"📰 Новости: {CATEGORY_NAMES.get(category, category)}\n\n{text}")
+            except Exception as send_err:
+                logger.error(f"Error sending message via callback: {send_err}")
+    else:
+        # Send via command handler
+        await safe_send_message(update, text)
+
+
 async def news_categories(update: Update, context: CallbackContext) -> None:
+    """Show available news categories."""
     logger.info(f"User {update.effective_user.id} requested news categories")
     cats = ", ".join(NEWS_CATEGORIES)
     await safe_send_message(update, f"Доступные категории: {cats}")
@@ -226,27 +361,57 @@ async def set_country(update: Update, context: CallbackContext) -> None:
 
 
 async def news_by_category(update: Update, context: CallbackContext) -> None:
+    """Handle /news command - show category buttons or fetch news if category specified."""
     logger.info(f"User {update.effective_user.id} requested news by category")
+    
     if not NEWSAPI_KEY:
         await safe_send_message(update, "NEWSAPI_KEY не задан. Укажите его в .env, чтобы пользоваться новостями.")
         return
+    
     parts = update.message.text.split(maxsplit=1)
+    
+    # If no category specified, show inline keyboard with category buttons
     if len(parts) < 2:
-        await safe_send_message(update, "Использование: /news {категория}. См. /categories")
+        try:
+            keyboard = build_category_keyboard()
+            country = context.chat_data.get("news_country", "us")
+            message_text = (
+                "📰 Выберите категорию новостей:\n\n"
+                f"Страна: {country.upper()}\n"
+                "(Используйте /country {код} для изменения)"
+            )
+            await update.message.reply_text(message_text, reply_markup=keyboard)
+        except Exception as e:
+            logger.error(f"Error sending category keyboard: {e}")
+            await safe_send_message(update, "Использование: /news {категория}. См. /categories")
         return
+    
+    # Category specified - fetch news directly
     category = parts[1].strip().lower()
-    if category not in NEWS_CATEGORIES:
-        await safe_send_message(update, "Неизвестная категория. См. /categories")
+    await fetch_and_send_news(update, context, category, is_callback=False)
+
+
+async def news_category_callback(update: Update, context: CallbackContext) -> None:
+    """Handle callback query when user clicks on a category button."""
+    query = update.callback_query
+    if not query:
         return
-    country = context.chat_data.get("news_country", "us")
-    logger.info(f"Fetching news for category={category}, country={country}")
-    # NewsAPI: top-headlines supports category only with country
-    data = news_api_get("top-headlines", {"category": category, "country": country, "pageSize": 10})
-    if not data:
-        await safe_send_message(update, "Не удалось получить новости. Попробуйте позже.")
+    
+    # Extract category from callback_data (format: "news_category_{category}")
+    callback_data = query.data
+    if not callback_data.startswith("news_category_"):
+        logger.warning(f"Unknown callback data: {callback_data}")
+        try:
+            await query.answer("Неизвестная команда")
+        except Exception:
+            pass
         return
-    text = format_articles(data.get("articles", []))
-    await safe_send_message(update, text)
+    
+    category = callback_data.replace("news_category_", "")
+    logger.info(f"User {update.effective_user.id} selected category: {category}")
+    
+    # Fetch and send news for selected category
+    await fetch_and_send_news(update, context, category, is_callback=True)
 
 
 async def list_sources(update: Update, context: CallbackContext) -> None:
@@ -524,6 +689,7 @@ async def start(update: Update, context: CallbackContext) -> None:
         "/todo {список id} — сформировать чеклист\n"
         "\nНовости:\n"
         "/categories — список доступных категорий\n"
+        "/news — показать кнопки с категориями новостей\n"
         "/news {категория} — последние заголовки по категории (по стране)\n"
         "/country {код} — задать страну\n"
         "/sources — популярные источники\n"
@@ -740,6 +906,10 @@ def build_application():
     app.add_handler(CommandHandler("country", set_country))
     app.add_handler(CommandHandler("sources", list_sources))
     app.add_handler(CommandHandler("source", news_by_source))
+    
+    # --- Callback handlers for inline buttons ---
+    # Handle category button clicks (callback_data starts with "news_category_")
+    app.add_handler(CallbackQueryHandler(news_category_callback, pattern="^news_category_"))
 
     # Register error handler
     app.add_error_handler(error_handler)
